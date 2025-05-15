@@ -4,6 +4,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 // Scene
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1e3f66); // Ocean blue
+scene.fog = new THREE.Fog(0x1e3f66, 5, 20); // color, near, far
 
 // Camera
 const camera = new THREE.PerspectiveCamera(
@@ -47,6 +48,27 @@ const floor = new THREE.Mesh(floorGeometry, floorMaterial);
 floor.rotation.x = -Math.PI / 2; // Rotate to lay flat
 floor.position.y = -1; //Lower it a bit
 scene.add(floor);
+
+const textureLoader = new THREE.TextureLoader();
+const causticsTexture = textureLoader.load("./assets/textures/caustics.png");
+causticsTexture.wrapS = causticsTexture.wrapT = THREE.RepeatWrapping;
+causticsTexture.repeat.set(4, 4);
+
+// Create a new mesh slightly above the floor to project the caustics
+const causticsMaterial = new THREE.MeshBasicMaterial({
+    map: causticsTexture,
+    transparent: true,
+    opacity: 0.4,
+    depthWrite: false,
+});
+
+const causticsPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(20, 20),
+    causticsMaterial
+);
+causticsPlane.rotation.x = -Math.PI / 2;
+causticsPlane.position.y = -0.69; // slightly above the floor
+scene.add(causticsPlane);
 
 function addCoral(x, z) {
     const coralGeometry = new THREE.IcosahedronGeometry(
@@ -104,6 +126,18 @@ for (let i = 0; i < 5; i++) {
     fishes.push(fish);
 }
 
+const waterGeometry = new THREE.PlaneGeometry(20, 20, 32, 32);
+const waterMaterial = new THREE.MeshStandardMaterial({
+    color: 0x3399ff,
+    transparent: true,
+    opacity: 0.15,
+    side: THREE.DoubleSide,
+});
+const water = new THREE.Mesh(waterGeometry, waterMaterial);
+water.rotation.x = -Math.PI / 2;
+water.position.y = 3;
+scene.add(water);
+
 // OrbitControls
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; // Smooth camera movements
@@ -120,6 +154,14 @@ function animate() {
             Math.sin(Date.now() * 0.001 + index)
         );
     });
+
+    causticsTexture.offset.x += 0.0005;
+    causticsTexture.offset.y += 0.0003;
+
+    water.position.y = 3 + 0.05 * Math.sin(Date.now() * 0.001);
+
+    directionalLight.position.x = 5 * Math.sin(Date.now() * 0.001);
+    directionalLight.position.z = 5 * Math.cos(Date.now() * 0.001);
 
     controls.update();
     renderer.render(scene, camera);
