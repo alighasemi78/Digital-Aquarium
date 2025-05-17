@@ -114,6 +114,7 @@ function createFish(color = 0xffcc00) {
 }
 
 const fishes = [];
+const fishData = []; // store direction and speed
 
 for (let i = 0; i < 5; i++) {
     const fish = createFish();
@@ -122,8 +123,18 @@ for (let i = 0; i < 5; i++) {
         Math.random() * 2,
         (Math.random() - 0.5) * 10
     );
-    scene.add(fish);
+
+    // Each fish gets a direction (normalized vector) and speed
+    const direction = new THREE.Vector3(
+        Math.random() - 0.5,
+        0,
+        Math.random() - 0.5
+    ).normalize();
+    const speed = 0.01 + Math.random() * 0.01;
+
+    fishData.push({ direction, speed });
     fishes.push(fish);
+    scene.add(fish);
 }
 
 const waterGeometry = new THREE.PlaneGeometry(20, 20, 32, 32);
@@ -142,17 +153,93 @@ scene.add(water);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; // Smooth camera movements
 
+window.addEventListener("click", (event) => {
+    // Convert screen to 3D coordinates
+    const mouse = new THREE.Vector2(
+        (event.clientX / window.innerWidth) * 2 - 1,
+        -(event.clientY / window.innerHeight) * 2 + 1
+    );
+
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, camera);
+
+    const intersects = raycaster.intersectObject(floor);
+    if (intersects.length > 0) {
+        const point = intersects[0].point;
+        foodPosition = point;
+
+        // Remove previous food
+        if (foodMesh) scene.remove(foodMesh);
+
+        // Add new food marker
+        const foodGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+        const foodMaterial = new THREE.MeshStandardMaterial({
+            color: 0xff0000,
+        });
+        foodMesh = new THREE.Mesh(foodGeometry, foodMaterial);
+        foodMesh.position.set(point.x, point.y + 0.05, point.z);
+        scene.add(foodMesh);
+    }
+});
+
+const bubbles = [];
+
+function createBubble() {
+    const geometry = new THREE.SphereGeometry(0.05, 8, 8);
+    const material = new THREE.MeshBasicMaterial({
+        color: 0x99ccff,
+        transparent: true,
+        opacity: 0.6,
+    });
+    const bubble = new THREE.Mesh(geometry, material);
+
+    // Start near coral or fish
+    bubble.position.set(
+        (Math.random() - 0.5) * 10,
+        -0.5,
+        (Math.random() - 0.5) * 10
+    );
+
+    scene.add(bubble);
+    bubbles.push(bubble);
+}
+
+let foodPosition = null;
+let foodMesh = null;
+
 // Animation Loop
 function animate() {
     requestAnimationFrame(animate);
 
-    fishes.forEach((fish, index) => {
-        fish.position.x += 0.01 * Math.sin(Date.now() * 0.001 + index);
-        fish.position.z += 0.01 * Math.cos(Date.now() * 0.001 + index);
-        fish.rotation.y = Math.atan2(
-            -Math.cos(Date.now() * 0.001 + index),
-            Math.sin(Date.now() * 0.001 + index)
-        );
+    fishes.forEach((fish, i) => {
+        const data = fishData[i];
+
+        // Move in direction
+        fish.position.addScaledVector(data.direction, data.speed);
+
+        // Occasionally change direction
+        if (Math.random() < 0.005) {
+            data.direction = new THREE.Vector3(
+                Math.random() - 0.5,
+                0,
+                Math.random() - 0.5
+            ).normalize();
+        }
+
+        if (foodPosition) {
+            const toFood = new THREE.Vector3().subVectors(
+                foodPosition,
+                fish.position
+            );
+            toFood.y = 0;
+            toFood.normalize();
+
+            // Blend current direction toward food
+            data.direction.lerp(toFood, 0.02);
+        }
+
+        // Turn the fish to face direction
+        fish.rotation.y = Math.atan2(-data.direction.z, data.direction.x);
     });
 
     causticsTexture.offset.x += 0.0005;
@@ -162,6 +249,23 @@ function animate() {
 
     directionalLight.position.x = 5 * Math.sin(Date.now() * 0.001);
     directionalLight.position.z = 5 * Math.cos(Date.now() * 0.001);
+
+    // Add bubbles occasionally
+    if (Math.random() < 0.05) {
+        createBubble();
+    }
+
+    // Update bubbles
+    for (let i = bubbles.length - 1; i >= 0; i--) {
+        const bubble = bubbles[i];
+        bubble.position.y += 0.02;
+        bubble.material.opacity -= 0.002;
+
+        if (bubble.material.opacity <= 0) {
+            scene.remove(bubble);
+            bubbles.splice(i, 1);
+        }
+    }
 
     controls.update();
     renderer.render(scene, camera);
